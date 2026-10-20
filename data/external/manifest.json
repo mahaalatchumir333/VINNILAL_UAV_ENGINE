@@ -1,0 +1,55 @@
+{
+  "notice": "These are separate surrogate benchmark domains, not UAV engine telemetry. Sensor labels and units are not interchangeable.",
+  "benchmarks": {
+    "cmapss": {
+      "summary_file": "cmapss_cycle_summaries.csv",
+      "rows": 265256,
+      "time_unit": "engine cycles (not seconds)",
+      "source_release": "C-MAPSS FD001-FD004",
+      "source_citation": "Saxena et al., Damage Propagation Modeling for Aircraft Engine Run-to-Failure Simulation, PHM 2008.",
+      "license_status": "Not specified in the supplied archive; verify source terms."
+    },
+    "obd2": {
+      "summary_file": "obd2_one_second_summaries.csv",
+      "rows": 5001,
+      "source_rows": 5001,
+      "time_unit": "relative seconds within source segment",
+      "signals": [
+        "RPM",
+        "SPEED",
+        "THROTTLE_POS",
+        "RELATIVE_THROTTLE_POS",
+        "ENGINE_LOAD",
+        "ABSOLUTE_LOAD",
+        "INTAKE_PRESSURE",
+        "INTAKE_TEMP",
+        "COOLANT_TEMP",
+        "FUEL_USAGE_ML_MIN"
+      ],
+      "license_status": "User-provided source; verify the original dataset terms.",
+      "privacy": "Absolute timestamps and source segment identifiers are omitted."
+    },
+    "ims_bearings": {
+      "summary_file": "ims_bearing_waveform_features.csv",
+      "source_release": "IMS Center Bearing Dataset (user-provided archive)",
+      "test_files": 9464,
+      "rows": 46480,
+      "channels_per_test": {
+        "1st_test": 8,
+        "2nd_test": 4,
+        "3rd_test": 4
+      },
+      "time_unit": "seconds from first filename timestamp within each test",
+      "features": [
+        "mean",
+        "rms",
+        "std",
+        "peak_abs",
+        "excess_kurtosis"
+      ],
+      "labels": "No fault or RUL labels are generated.",
+      "license_status": "Not specified in the supplied archive; verify source terms.",
+      "privacy": "Absolute timestamps and source file names are omitted."
+    }
+  }
+}

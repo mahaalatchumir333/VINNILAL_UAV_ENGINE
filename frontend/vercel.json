@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/vinnilal_dashboard.html"
+    }
+  ]
+}

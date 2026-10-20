@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VINNILAL | UAV Digital Twin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    body { background-color: #0b0f17; color: #e2e8f0; font-family: sans-serif; }
+    .card { background: #131b29; border: 1px solid #1e293b; border-radius: 12px; }
+    .chart-canvas { display: block; width: 100%; height: 220px; }
+    .health-track { background: #1e293b; border-radius: 9999px; height: 8px; overflow: hidden; }
+    .health-fill { background: #34d399; height: 100%; transition: width 250ms ease, background-color 250ms ease; }
+  </style>
+</head>
+<body class="p-4">
+  <!-- Top Bar -->
+  <header class="flex justify-between items-center mb-4 card p-4">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-yellow-500 flex items-center justify-center font-bold text-black">T</div>
+      <div>
+        <h1 class="text-xl font-bold tracking-wide text-white">TRINETRA-AERO <span class="text-xs text-yellow-500 border border-yellow-500/40 px-2 py-0.5 rounded">SIMULATOR</span></h1>
+        <p class="text-xs text-slate-400">TAPAS-BH-201 + ROTAX 914 F TURBOCHARGED (115 HP)</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-6 text-xs text-slate-300">
+      <div class="flex items-center gap-2"><span id="connection-dot" class="w-2 h-2 rounded-full bg-slate-500"></span> BROADCAST: <span id="connection-status">CONNECTING</span></div>
+      <div>CLIENTS: <span class="font-mono text-yellow-400">1</span></div>
+      <div>STATUS: <span id="sys-status" class="font-bold text-green-400">NORMAL</span></div>
+    </div>
+  </header>
+
+  <section class="card mb-4 p-3 flex flex-wrap items-center gap-2">
+    <label for="backend-url" class="text-xs text-slate-300">BACKEND API URL</label>
+    <input id="backend-url" type="url" placeholder="https://your-service.onrender.com"
+      class="min-w-64 flex-1 rounded bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white"
+      autocomplete="url" spellcheck="false">
+    <button id="connect-backend" type="button"
+      class="rounded bg-yellow-500 px-4 py-2 text-xs font-bold text-black hover:bg-yellow-400">
+      CONNECT
+    </button>
+    <span id="backend-config-status" class="text-xs text-slate-400" aria-live="polite"></span>
+  </section>
+
+  <div class="grid grid-cols-12 gap-4">
+    <!-- Left Controls Panel -->
+    <div class="col-span-3 card p-4 flex flex-col gap-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-semibold text-slate-300">Mission & Flight Controls</h2>
+        <span id="flight-control-status" class="text-xs text-slate-400">LIVE CRUISE</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <button data-phase="idle" class="phase-button bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs">IDLE</button>
+        <button data-phase="takeoff" class="phase-button bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs">TAKEOFF</button>
+        <button data-phase="climb" class="phase-button bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs">CLIMB</button>
+        <button data-phase="cruise" class="phase-button bg-yellow-500 text-black font-bold py-1 rounded text-xs">CRUISE</button>
+        <button data-phase="loiter" class="phase-button bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs">LOITER</button>
+        <button data-phase="descent" class="phase-button bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs">DESCENT</button>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400 flex justify-between">THROTTLE COMMAND <span id="val-throttle" class="text-yellow-400">75%</span></label>
+        <input id="slider-throttle" type="range" min="0" max="100" value="75" class="w-full accent-yellow-500">
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400 flex justify-between">FLIGHT ALTITUDE <span id="val-alt" class="text-yellow-400">20,000 ft</span></label>
+        <input id="slider-alt" type="range" min="0" max="30000" value="20000" class="w-full accent-yellow-500">
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-400 flex justify-between">AMBIENT AIR TEMP <span id="val-temp" class="text-yellow-400">16.0 °C</span></label>
+        <input id="slider-temp" type="range" min="-40" max="50" value="16" class="w-full accent-yellow-500">
+      </div>
+    </div>
+
+    <!-- Center 3D spatial viewport -->
+    <div class="col-span-6 card p-4 flex flex-col justify-between">
+      <div class="flex justify-between text-xs text-slate-400 mb-2">
+        <span>TAPAS-BH-201 Tactical UAV — 3D Spatial Attitude</span>
+        <span>PHASE ATTITUDE (ILLUSTRATIVE) · PITCH: <b id="val-pitch" class="text-white">0.0°</b> ROLL: <b id="val-roll" class="text-white">0.0°</b></span>
+      </div>
+      <div id="three-canvas" class="w-full h-64 bg-slate-950/80 rounded-lg overflow-hidden"></div>
+    </div>
+
+    <!-- Right Fault Injection Panel -->
+    <div class="col-span-3 card p-4 flex flex-col gap-3">
+      <h2 class="text-sm font-semibold text-slate-300">Fault & Degradation Injection</h2>
+      
+      <div>
+        <div class="flex justify-between text-xs"><span class="text-slate-300">F05: LUBRICATION COLLAPSE</span><span id="fault-lub-value">0%</span></div>
+        <input id="fault-lub" type="range" min="0" max="1" step="0.1" value="0" class="w-full accent-red-500">
+      </div>
+
+      <div>
+        <div class="flex justify-between text-xs"><span class="text-slate-300">F04: COOLING FAILURE</span><span id="fault-cool-value">0%</span></div>
+        <input id="fault-cool" type="range" min="0" max="1" step="0.1" value="0" class="w-full accent-red-500">
+      </div>
+
+      <div>
+        <div class="flex justify-between text-xs"><span class="text-slate-300">F03: INJECTOR CLOG</span><span id="fault-inj-value">0%</span></div>
+        <input id="fault-inj" type="range" min="0" max="1" step="0.1" value="0" class="w-full accent-red-500">
+      </div>
+    </div>
+  </div>
+
+  <!-- Telemetry Readouts -->
+  <div class="grid grid-cols-4 gap-4 mt-4">
+    <div class="card p-3">
+      <div class="text-xs text-slate-400">CRANKSHAFT SPEED</div>
+      <div id="val-rpm" class="text-2xl font-bold text-yellow-400 font-mono">3309 RPM</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-xs text-slate-400">MANIFOLD PRESSURE</div>
+      <div id="val-map" class="text-2xl font-bold text-cyan-400 font-mono">39.2 kPa</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-xs text-slate-400">OIL PRESSURE / TEMP</div>
+      <div class="text-2xl font-bold text-emerald-400 font-mono"><span id="val-oilp">3.97</span> bar / <span id="val-oilt">67.1</span>°C</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-xs text-slate-400">VIBRATION RMS</div>
+      <div id="val-vib" class="text-2xl font-bold text-purple-400 font-mono">0.61 mm/s</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 mt-4">
+    <section class="card p-4">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-sm font-semibold text-slate-300">Thermal Sensors vs Digital Twin</h2>
+        <span class="text-xs text-slate-400">Live rolling window</span>
+      </div>
+      <div class="flex gap-4 text-xs text-slate-300 mb-2">
+        <span><i class="inline-block w-3 h-1 bg-cyan-400 mr-1"></i>CHT measured</span>
+        <span><i class="inline-block w-3 h-1 bg-yellow-400 mr-1"></i>CHT twin</span>
+        <span><i class="inline-block w-3 h-1 bg-blue-400 mr-1"></i>EGT measured</span>
+        <span><i class="inline-block w-3 h-1 bg-orange-400 mr-1"></i>EGT twin</span>
+      </div>
+      <canvas id="thermal-chart" class="chart-canvas" aria-label="Measured and predicted CHT and EGT"></canvas>
+      <p id="chart-caption" class="text-xs text-slate-500 mt-2">Waiting for live telemetry.</p>
+    </section>
+    <section class="card p-4">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="text-sm font-semibold text-slate-300">Subsystem Health</h2>
+        <span class="text-xs text-slate-500">Prototype index · not certified</span>
+      </div>
+      <div id="health-gauges" class="space-y-3">
+        <div data-health="thermal"><div class="flex justify-between text-xs mb-1"><span>Thermal</span><span class="health-value">—</span></div><div class="health-track"><div class="health-fill" style="width:0%"></div></div></div>
+        <div data-health="lubrication"><div class="flex justify-between text-xs mb-1"><span>Lubrication</span><span class="health-value">—</span></div><div class="health-track"><div class="health-fill" style="width:0%"></div></div></div>
+        <div data-health="combustion"><div class="flex justify-between text-xs mb-1"><span>Combustion</span><span class="health-value">—</span></div><div class="health-track"><div class="health-fill" style="width:0%"></div></div></div>
+        <div data-health="vibration"><div class="flex justify-between text-xs mb-1"><span>Mechanical / vibration</span><span class="health-value">—</span></div><div class="health-track"><div class="health-fill" style="width:0%"></div></div></div>
+        <div data-health="sensor"><div class="flex justify-between text-xs mb-1"><span>Sensor confidence</span><span class="health-value">—</span></div><div class="health-track"><div class="health-fill" style="width:0%"></div></div></div>
+      </div>
+      <div class="border-t border-slate-700 mt-4 pt-3">
+        <h3 class="text-xs font-semibold text-slate-300 mb-2">Alerts & Evidence</h3>
+        <div id="alert-console" class="text-xs text-slate-400 whitespace-pre-line" aria-live="polite">Waiting for live analytics.</div>
+      </div>
+      <details class="border-t border-slate-700 mt-4 pt-3">
+        <summary class="text-xs font-semibold text-cyan-300 cursor-pointer">Explain this AI assessment</summary>
+        <div id="xai-content" class="mt-3 space-y-4 text-xs text-slate-300">
+          <p id="xai-overall" class="font-semibold text-white">Overall health index: waiting for live analytics.</p>
+          <p id="xai-method" class="text-slate-400">Detailed explanation will appear with the live analytics.</p>
+          <div>
+            <h4 class="font-semibold text-slate-200 mb-1">Anomaly score and decision path</h4>
+            <p id="xai-anomaly" class="text-slate-400">Waiting for analytics.</p>
+          </div>
+          <div>
+            <h4 class="font-semibold text-slate-200 mb-1">Measured vs healthy twin residuals</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left">
+                <thead class="text-slate-500"><tr><th>Sensor</th><th>Measured</th><th>Twin</th><th>Δ</th><th>Residual σ</th><th>1σ scale</th></tr></thead>
+                <tbody id="xai-residuals"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h4 class="font-semibold text-slate-200 mb-1">Fault candidates and vote rules</h4>
+            <ul id="xai-candidates" class="list-disc pl-4 text-slate-400"></ul>
+            <div id="xai-rules" class="space-y-1 mt-2"></div>
+          </div>
+          <div>
+            <h4 class="font-semibold text-slate-200 mb-1">Health index contribution</h4>
+            <ul id="xai-health" class="space-y-1 text-slate-400"></ul>
+          </div>
+          <div>
+            <h4 class="font-semibold text-slate-200 mb-1">Prototype RUL trend</h4>
+            <p id="xai-rul" class="text-slate-400"></p>
+          </div>
+          <details>
+            <summary class="text-slate-400 cursor-pointer">Engineered features and limits</summary>
+            <pre id="xai-features" class="whitespace-pre-wrap break-all text-[10px] text-slate-500 mt-2"></pre>
+            <ul id="xai-limitations" class="list-disc pl-4 text-slate-500 mt-2"></ul>
+          </details>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 mt-4">
+    <section class="card p-4">
+      <div class="flex justify-between items-center gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-300">CSV Scenario Replay</h2>
+          <p class="text-xs text-slate-500 mt-1">Local replay only; rows are not sent to the live analytics service.</p>
+        </div>
+        <label class="bg-slate-800 hover:bg-slate-700 rounded px-3 py-2 text-xs cursor-pointer">
+          Load CSV
+          <input id="scenario-file" type="file" accept=".csv,text/csv" class="hidden">
+        </label>
+        <button id="resume-live" class="bg-slate-800 hover:bg-slate-700 rounded px-3 py-2 text-xs">Return to live</button>
+      </div>
+      <input id="scenario-slider" type="range" min="0" max="0" value="0" disabled class="w-full mt-4 accent-yellow-500">
+      <div id="scenario-replay-status" class="text-sm text-slate-300 mt-2" aria-live="polite">Choose a scenario CSV to begin replay.</div>
+    </section>
+    <section class="card p-4">
+      <h2 class="text-sm font-semibold text-slate-300 mb-2">Maintenance & Export</h2>
+      <p class="text-xs text-slate-500 mb-3">Downloads include detailed explanation for the latest live sample and up to 5,000 compact history rows. Files are generated in this browser.</p>
+      <div class="flex flex-wrap gap-2">
+        <button id="export-report" class="bg-slate-800 hover:bg-slate-700 rounded px-3 py-2 text-xs">Export JSON report</button>
+        <button id="export-ticket" class="bg-yellow-500 hover:bg-yellow-400 text-black font-semibold rounded px-3 py-2 text-xs">Export maintenance ticket</button>
+      </div>
+      <div id="export-status" class="text-xs text-slate-400 mt-2" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 mt-4">
+    <section class="card p-4">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">Mission Risk Estimate</h2>
+      <div class="flex flex-wrap gap-2 items-center">
+        <select id="mission-profile" class="bg-slate-800 text-slate-200 rounded p-2 text-sm">
+          <option value="short_cruise">Short Cruise</option>
+          <option value="hot_weather_endurance">Hot-Weather Endurance</option>
+          <option value="high_altitude_recon">High-Altitude Recon</option>
+        </select>
+        <button id="run-mission-risk" class="bg-yellow-500 text-black font-semibold rounded px-3 py-2 text-sm">Estimate</button>
+      </div>
+      <div id="mission-risk-result" class="mt-3 text-sm text-slate-300" aria-live="polite">
+        Prototype scenario estimate only; not flight clearance.
+      </div>
+    </section>
+    <section class="card p-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-semibold text-slate-300">Saved Telemetry History</h2>
+        <button id="load-history" class="bg-slate-800 hover:bg-slate-700 rounded px-3 py-2 text-sm">Load latest</button>
+      </div>
+      <input id="history-slider" type="range" min="0" max="0" value="0" disabled class="w-full mt-3 accent-yellow-500">
+      <div id="history-result" class="text-sm text-slate-300" aria-live="polite">No history loaded.</div>
+    </section>
+  </div>
+  <footer class="text-center text-xs text-slate-500 mt-4 p-2">
+    Decision-support prototype only. Results are from synthetic scenarios; C-MAPSS, OBD-II, and IMS are separate surrogate benchmarks, not MALE-UAV flight data. Not certified for flight-safety decisions.
+  </footer>
+
+  <script>
+    // 3D Scene Initialization
+    const container = document.getElementById('three-canvas');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
+
+    // Lightweight illustrative aircraft model; orientation follows the selected phase.
+    const uav = new THREE.Group();
+    const airframeMaterial = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      metalness: 0.35,
+      roughness: 0.55,
+      wireframe: true
+    });
+    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 3.6, 12), airframeMaterial);
+    fuselage.rotation.z = Math.PI / 2;
+    uav.add(fuselage);
+    const wings = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.12, 3.2), airframeMaterial);
+    wings.position.x = -0.25;
+    uav.add(wings);
+    const tailplane = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.1, 1.15), airframeMaterial);
+    tailplane.position.x = -1.45;
+    uav.add(tailplane);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.55, 0.1), airframeMaterial);
+    fin.position.set(-1.48, 0.28, 0);
+    uav.add(fin);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.19, 0.55, 12), airframeMaterial);
+    nose.rotation.z = -Math.PI / 2;
+    nose.position.x = 2.0;
+    uav.add(nose);
+    scene.add(uav);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 2));
+    camera.position.set(0, 2.7, 6.5);
+    camera.lookAt(0, 0, 0);
+    let targetPitch = 0;
+    let targetRoll = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      uav.rotation.z += (targetPitch - uav.rotation.z) * 0.05;
+      uav.rotation.x += (targetRoll - uav.rotation.x) * 0.05;
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Use the same origin for local development; public deployments connect to Render.
+    const backendParameter = new URLSearchParams(window.location.search).get('backend');
+    const savedBackend = localStorage.getItem('vinnilal-backend-url');
+    const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    let apiBase = backendParameter || savedBackend || (isLocalHost ? window.location.origin : '');
+    let ws = null;
+    let reconnectTimer = null;
+    const connectionStatus = document.getElementById('connection-status');
+    const connectionDot = document.getElementById('connection-dot');
+    const backendUrlInput = document.getElementById('backend-url');
+    const backendConfigStatus = document.getElementById('backend-config-status');
+    const phaseButtons = [...document.querySelectorAll('.phase-button')];
+    let savedHistory = [];
+    let latestPayload = null;
+    let liveThermalSamples = [];
+    let scenarioRows = [];
+    let scenarioName = '';
+
+    function normalizeBackendUrl(value) {
+      const parsed = new URL(value.trim());
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new Error('Use an http:// or https:// backend URL.');
+      }
+      return parsed.origin;
+    }
+
+    function connectTelemetry() {
+      window.clearTimeout(reconnectTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+        ws = null;
+      }
+      if (!apiBase) {
+        connectionStatus.innerText = 'BACKEND URL REQUIRED';
+        backendConfigStatus.innerText = 'Paste the public Render service URL to connect.';
+        connectionDot.classList.remove('bg-green-400', 'animate-pulse');
+        connectionDot.classList.add('bg-red-500');
+        return;
+      }
+
+      const backend = new URL(apiBase);
+      const wsProtocol = backend.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${wsProtocol}//${backend.host}/ws/telemetry`);
+      ws = socket;
+      backendConfigStatus.innerText = `Backend: ${backend.origin}`;
+
+      socket.onopen = () => {
+        connectionStatus.innerText = 'LIVE';
+        connectionDot.classList.remove('bg-slate-500', 'bg-red-500');
+        connectionDot.classList.add('bg-green-400', 'animate-pulse');
+      };
+
+      socket.onclose = () => {
+        if (ws !== socket) return;
+        connectionStatus.innerText = 'DISCONNECTED · RETRYING';
+        connectionDot.classList.remove('bg-green-400', 'animate-pulse');
+        connectionDot.classList.add('bg-red-500');
+        reconnectTimer = window.setTimeout(connectTelemetry, 5000);
+      };
+
+      socket.onerror = () => {
+        if (ws !== socket) return;
+        connectionStatus.innerText = 'CONNECTION ERROR';
+        connectionDot.classList.remove('bg-green-400', 'animate-pulse');
+        connectionDot.classList.add('bg-red-500');
+      };
+
+      socket.onmessage = handleTelemetryMessage;
+    }
+
+    backendUrlInput.value = apiBase;
+    if (backendParameter) {
+      try {
+        apiBase = normalizeBackendUrl(backendParameter);
+        localStorage.setItem('vinnilal-backend-url', apiBase);
+        backendUrlInput.value = apiBase;
+      } catch (error) {
+        apiBase = '';
+        backendConfigStatus.innerText = error.message;
+      }
+    } else if (apiBase) {
+      try {
+        apiBase = normalizeBackendUrl(apiBase);
+        backendUrlInput.value = apiBase;
+      } catch (error) {
+        apiBase = '';
+        backendConfigStatus.innerText = error.message;
+      }
+    }
+
+    document.getElementById('connect-backend').addEventListener('click', () => {
+      try {
+        apiBase = normalizeBackendUrl(backendUrlInput.value);
+        localStorage.setItem('vinnilal-backend-url', apiBase);
+        backendUrlInput.value = apiBase;
+        connectTelemetry();
+      } catch (error) {
+        backendConfigStatus.innerText = error.message || 'Enter a valid backend URL.';
+      }
+    });
+
+    backendUrlInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') document.getElementById('connect-backend').click();
+    });
+
+    function drawThermalChart(samples) {
+      const canvas = document.getElementById('thermal-chart');
+      const context = canvas.getContext('2d');
+      const bounds = canvas.getBoundingClientRect();
+      const pixelRatio = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(bounds.width * pixelRatio));
+      canvas.height = Math.max(1, Math.floor(bounds.height * pixelRatio));
+      context.scale(pixelRatio, pixelRatio);
+      const width = bounds.width;
+      const height = bounds.height;
+      context.clearRect(0, 0, width, height);
+      if (!samples.length) return;
+
+      const values = samples.flatMap((sample) => [
+        sample.cht, sample.egt, sample.twinCht, sample.twinEgt
+      ]).filter(Number.isFinite);
+      if (!values.length) return;
+      const minValue = Math.floor(Math.min(...values) / 50) * 50;
+      const maxValue = Math.ceil(Math.max(...values) / 50) * 50 || minValue + 50;
+      const left = 42, right = 8, top = 12, bottom = 24;
+      const plotWidth = width - left - right;
+      const plotHeight = height - top - bottom;
+      context.font = '10px sans-serif';
+      context.strokeStyle = '#334155';
+      context.fillStyle = '#94a3b8';
+      context.lineWidth = 1;
+      for (let tick = 0; tick <= 4; tick++) {
+        const y = top + plotHeight * tick / 4;
+        const value = maxValue - (maxValue - minValue) * tick / 4;
+        context.beginPath();
+        context.moveTo(left, y);
+        context.lineTo(width - right, y);
+        context.stroke();
+        context.fillText(`${Math.round(value)}°`, 2, y + 3);
+      }
+      const drawLine = (key, color, dashed = false) => {
+        const points = samples.map((sample, index) => ({
+          x: left + (samples.length === 1 ? 0 : plotWidth * index / (samples.length - 1)),
+          y: top + (maxValue - sample[key]) / (maxValue - minValue || 1) * plotHeight,
+          value: sample[key]
+        })).filter((point) => Number.isFinite(point.value));
+        if (!points.length) return;
+        context.beginPath();
+        context.strokeStyle = color;
+        context.lineWidth = 2;
+        context.setLineDash(dashed ? [5, 4] : []);
+        points.forEach((point, index) => {
+          if (index === 0) context.moveTo(point.x, point.y);
+          else context.lineTo(point.x, point.y);
+        });
+        context.stroke();
+        context.setLineDash([]);
+      };
+      drawLine('cht', '#22d3ee');
+      drawLine('egt', '#60a5fa');
+      drawLine('twinCht', '#facc15', true);
+      drawLine('twinEgt', '#fb923c', true);
+    }
+
+    function updateHealthGauges(subsystems) {
+      Object.entries(subsystems || {}).forEach(([name, value]) => {
+        const gauge = document.querySelector(`[data-health="${name}"]`);
+        if (!gauge || !Number.isFinite(Number(value))) return;
+        const score = Math.max(0, Math.min(100, Number(value)));
+        gauge.querySelector('.health-value').innerText = `${score.toFixed(1)}%`;
+        const fill = gauge.querySelector('.health-fill');
+        fill.style.width = `${score}%`;
+        fill.style.backgroundColor = score < 40 ? '#f87171' : score < 70 ? '#fbbf24' : '#34d399';
+      });
+    }
+
+    function updateAlertConsole(analytics) {
+      const consoleElement = document.getElementById('alert-console');
+      const lines = [];
+      const status = analytics?.status?.toUpperCase();
+      const hardAlarms = analytics?.hard_alarms || [];
+      const fault = analytics?.fault_type;
+      const faultCode = analytics?.fault_code;
+      const evidence = analytics?.evidence || [];
+      if (status && status !== 'NORMAL') lines.push(`Status: ${status}`);
+      hardAlarms.forEach((alarm) => lines.push(`ALARM · ${alarm}`));
+      if (status !== 'NORMAL' && fault && fault !== 'none') {
+        lines.push(`Pattern diagnosis: ${faultCode || fault.replaceAll('_', ' ').toUpperCase()}`);
+      }
+      if ((status === 'WARNING' || status === 'CRITICAL') && (!fault || fault === 'none') && !hardAlarms.length) {
+        lines.push('No specific fault pattern identified.');
+      }
+      if (status !== 'NORMAL') evidence.forEach((item) => lines.push(`Evidence · ${item}`));
+      if (!lines.length && status === 'NORMAL') lines.push('No active alert indications.');
+      if (!lines.length) lines.push('Analytics are not available for this packet.');
+      consoleElement.innerText = lines.join('\n');
+      consoleElement.classList.toggle('text-red-300', status === 'CRITICAL');
+      consoleElement.classList.toggle('text-yellow-300', status === 'WARNING' || status === 'SUSPECT');
+      consoleElement.classList.toggle('text-slate-400', status === 'NORMAL' || !status);
+    }
+
+    function renderExplainability(analytics) {
+      const explanation = analytics?.explainability;
+      if (!explanation) return;
+      const format = (value, digits = 2) =>
+        value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
+          ? Number(value).toFixed(digits)
+          : 'n/a';
+      const method = explanation.methods || {};
+      document.getElementById('xai-overall').innerText =
+        `Overall health index: ${format(explanation.health_index?.displayed_overall_health_index, 1)}/100`;
+      document.getElementById('xai-method').innerText =
+        `${method.fault_diagnosis} ${method.anomaly_detector} ` +
+        `${method.data_basis}`;
+
+      const anomaly = explanation.anomaly || {};
+      const thresholds = anomaly.thresholds || {};
+      const limits = (anomaly.hard_alarm_limits || []).map((limit) =>
+        `${limit.sensor} ${format(limit.observed)} ${limit.unit} ${limit.operator} ${format(limit.threshold)}: ` +
+        `${limit.triggered ? 'BREACHED' : 'within limit'}`
+      ).join(' · ');
+      const mlDescription = anomaly.ml_model_loaded
+        ? `Isolation Forest score ${format(anomaly.ml_score)} × ${format(anomaly.ml_weight)}`
+        : 'Isolation Forest inactive (no fitted model loaded; its weighted score is zero)';
+      document.getElementById('xai-anomaly').innerText =
+        `Physics score ${format(anomaly.physics_score)} × ${format(anomaly.physics_weight)}; ${mlDescription}. ` +
+        `Combined score ${format(anomaly.combined_score)}. State: instant ${anomaly.instant_state}, ` +
+        `persistence-confirmed ${anomaly.persistence_confirmed_state}, final ${anomaly.final_status}. ` +
+        `Score cutoffs: suspect ${format(thresholds.suspect)}, warning ${format(thresholds.warning)}, ` +
+        `critical ${format(thresholds.critical)}. ${anomaly.persistence_required_consecutive_ticks} ` +
+        `matching ticks are required for persistence confirmation. ${anomaly.status_rule} ` +
+        `Hard limits: ${limits}`;
+
+      const residualBody = document.getElementById('xai-residuals');
+      residualBody.replaceChildren();
+      (explanation.sensor_comparisons || []).forEach((sensor) => {
+        const row = document.createElement('tr');
+        [
+          `${sensor.sensor} (${sensor.unit})`,
+          format(sensor.measured),
+          format(sensor.twin_predicted),
+          `${format(sensor.residual)} ${sensor.unit}`,
+          `${format(sensor.normalized_residual_sigma)}σ`,
+          `${format(sensor.normal_residual_scale)} ${sensor.unit}`
+        ].forEach((value) => {
+          const cell = document.createElement('td');
+          cell.className = 'py-1 pr-2';
+          cell.textContent = value;
+          row.appendChild(cell);
+        });
+        row.title = sensor.interpretation;
+        residualBody.appendChild(row);
+      });
+
+      const diagnosis = explanation.fault_diagnosis || {};
+      const diagnosisStatus = (diagnosis.system_status || analytics.status || 'unknown').toUpperCase();
+      const candidateList = document.getElementById('xai-candidates');
+      candidateList.replaceChildren();
+      (diagnosis.candidate_vote_scores || []).forEach((candidate) => {
+        const item = document.createElement('li');
+        item.textContent =
+          `${candidate.fault.replaceAll('_', ' ')}: ${format(candidate.vote_score)} vote points`;
+        candidateList.appendChild(item);
+      });
+      const ruleList = document.getElementById('xai-rules');
+      ruleList.replaceChildren();
+      (diagnosis.rules || []).forEach((rule) => {
+        const item = document.createElement('p');
+        const conditionText = (rule.conditions || []).map((condition) =>
+          `${condition.feature}=${format(condition.observed)} ${condition.operator} ${format(condition.threshold)} ` +
+          `(${condition.passed ? 'pass' : 'not met'})`
+        ).join('; ');
+        item.className = rule.triggered ? 'text-amber-300' : 'text-slate-500';
+        item.textContent =
+          `${rule.triggered ? 'TRIGGERED' : 'not triggered'} · ${rule.fault.replaceAll('_', ' ')} · ` +
+          `${rule.explanation} · ${conditionText} · vote +${format(rule.vote)}`;
+        ruleList.appendChild(item);
+      });
+      const noDiagnosis = diagnosis.selected_fault === 'none';
+      if (noDiagnosis) {
+        const note = document.createElement('p');
+        note.className = 'text-slate-400 mt-2';
+        const candidateText = diagnosis.winning_vote_score > 0
+          ? `The largest partial candidate was ${diagnosis.candidate_vote_scores?.[0]?.fault || 'none'} ` +
+            `(${format(diagnosis.winning_vote_score)} votes). `
+          : 'No candidate rule received a vote. ';
+        note.textContent =
+          `No fault label met the ${format(diagnosis.minimum_vote_for_label)}-vote minimum. ` +
+          `${candidateText}System status is ${diagnosisStatus}. ` +
+          `Confidence is a rule-vote heuristic, not a probability.`;
+        ruleList.prepend(note);
+      } else {
+        const note = document.createElement('p');
+        note.className = 'text-emerald-300 mt-2';
+        note.textContent =
+          `Highest-scoring rule candidate: ${diagnosis.selected_fault.replaceAll('_', ' ')} ` +
+          `(${format(diagnosis.winning_vote_score)} vote points); system status is ${diagnosisStatus}. ` +
+          `A candidate is not a confirmed cause or alert by itself. Displayed confidence ` +
+          `${format(diagnosis.confidence * 100, 0)}% is not a calibrated probability.`;
+        ruleList.prepend(note);
+      }
+
+      const healthList = document.getElementById('xai-health');
+      healthList.replaceChildren();
+      const health = explanation.health_index || {};
+      Object.entries(health.components || {}).forEach(([name, component]) => {
+        const item = document.createElement('li');
+        const driverText = Object.entries(component.drivers || {})
+          .map(([key, value]) => `${key}=${typeof value === 'number' ? format(value) : value}`)
+          .join(', ');
+        item.textContent =
+          `${name}: ${format(component.health_index, 1)}/100 × ${format(component.weight)} weight = ` +
+          `${format(component.weighted_points, 2)} overall points · degradation ${format(component.degradation_fraction * 100, 1)}% · ${driverText}`;
+        healthList.appendChild(item);
+      });
+      document.getElementById('xai-overall').title = health.formula;
+
+      const rul = explanation.remaining_useful_life || {};
+      const estimate = rul.estimate_minutes === null
+        ? 'not available yet'
+        : `${format(rul.estimate_minutes, 1)} minutes`;
+      const bounds = rul.lower_bound_minutes === null
+        ? 'no interval available'
+        : `prototype interval ${format(rul.lower_bound_minutes, 1)}–${format(rul.upper_bound_minutes, 1)} minutes`;
+      document.getElementById('xai-rul').innerText =
+        `Estimate ${estimate}; ${bounds}. Trend ${format(rul.degradation_rate_per_minute, 4)} health points/min, ` +
+        `fit slope standard error ${format(rul.slope_standard_error, 4)}, qualifier ${rul.confidence_qualifier}. ` +
+        `${rul.assumption}`;
+      document.getElementById('xai-features').textContent =
+        JSON.stringify(explanation.features, null, 2);
+      const limitations = document.getElementById('xai-limitations');
+      limitations.replaceChildren();
+      (explanation.limitations || []).forEach((limitation) => {
+        const item = document.createElement('li');
+        item.textContent = limitation;
+        limitations.appendChild(item);
+      });
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [], field = '', quoted = false;
+      for (let index = 0; index < text.length; index++) {
+        const character = text[index];
+        if (character === '"' && quoted && text[index + 1] === '"') {
+          field += '"';
+          index++;
+        } else if (character === '"') {
+          quoted = !quoted;
+        } else if (character === ',' && !quoted) {
+          row.push(field);
+          field = '';
+        } else if ((character === '\n' || character === '\r') && !quoted) {
+          if (character === '\r' && text[index + 1] === '\n') index++;
+          row.push(field);
+          if (row.some((cell) => cell.trim() !== '')) rows.push(row);
+          row = [];
+          field = '';
+        } else {
+          field += character;
+        }
+      }
+      row.push(field);
+      if (row.some((cell) => cell.trim() !== '')) rows.push(row);
+      if (quoted) throw new Error('CSV contains an unterminated quoted field.');
+      if (rows.length < 2) throw new Error('CSV must contain a header and at least one data row.');
+
+      const headers = rows[0].map((header) => header.trim());
+      const required = ['rpm', 'cht', 'egt'];
+      const missing = required.filter((column) => !headers.includes(column));
+      if (missing.length) throw new Error(`CSV is missing required columns: ${missing.join(', ')}.`);
+      return rows.slice(1).map((cells, index) => {
+        const item = Object.fromEntries(headers.map((header, column) => [header, (cells[column] || '').trim()]));
+        for (const key of ['t', 'rpm', 'cht', 'egt', 'oil_pressure', 'oil_temperature', 'vibration', 'throttle', 'altitude', 'ambient_temperature']) {
+          if (item[key] !== undefined && item[key] !== '') item[key] = Number(item[key]);
+        }
+        if (!Number.isFinite(item.rpm) || !Number.isFinite(item.cht) || !Number.isFinite(item.egt)) {
+          throw new Error(`CSV row ${index + 2} has invalid RPM, CHT, or EGT values.`);
+        }
+        return item;
+      });
+    }
+
+    function downloadJson(filename, report) {
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function buildReport(kind) {
+      const analytics = latestPayload?.analytics;
+      const confirmedAlert = analytics && analytics.status !== 'normal';
+      return {
+        report_type: kind,
+        created_at: new Date().toISOString(),
+        prototype_disclaimer: 'Scenario-based decision support only; not certified or validated on MALE-UAV flight telemetry.',
+        engine_id: latestPayload?.telemetry?.engine_id || 'ENG-01',
+        alert: latestPayload ? {
+          status: analytics?.status || 'unknown',
+          likely_fault: confirmedAlert ? analytics?.fault_type || 'unknown' : null,
+          fault_code: confirmedAlert ? analytics?.fault_code || null : null,
+          confidence: confirmedAlert ? analytics?.confidence ?? null : null,
+          hard_alarms: analytics?.hard_alarms || [],
+          evidence: confirmedAlert ? analytics?.evidence || [] : []
+        } : null,
+        latest_live_sample: latestPayload,
+        saved_telemetry_history: savedHistory,
+        scenario_replay: scenarioRows.length ? {
+          source_file: scenarioName,
+          selected_row: Number(document.getElementById('scenario-slider').value),
+          row_count: scenarioRows.length,
+          selected_sample: scenarioRows[Number(document.getElementById('scenario-slider').value)] || null
+        } : null
+      };
+    }
+
+    function replayScenario(index) {
+      const row = scenarioRows[index];
+      if (!row) return;
+      const phase = row.mission_phase || row.mission_id || 'scenario';
+      document.getElementById('scenario-replay-status').innerText =
+        `${scenarioName} · ${Number(index) + 1}/${scenarioRows.length} · ` +
+        `${phase} · RPM ${Math.round(row.rpm)} · CHT ${row.cht.toFixed(1)}°C · EGT ${row.egt.toFixed(1)}°C` +
+        `${row._ground_truth_fault ? ` · label ${row._ground_truth_fault}` : ''}`;
+      document.getElementById('chart-caption').innerText =
+        'CSV replay: measured values only. This file has no twin prediction series.';
+      drawThermalChart(scenarioRows.slice(Math.max(0, Number(index) - 49), Number(index) + 1).map((sample) => ({
+        cht: sample.cht, egt: sample.egt
+      })));
+    }
+
+    function setSelectedPhase(phase) {
+      phaseButtons.forEach((button) => {
+        const selected = button.dataset.phase === phase;
+        button.classList.toggle('bg-yellow-500', selected);
+        button.classList.toggle('text-black', selected);
+        button.classList.toggle('font-bold', selected);
+        button.classList.toggle('bg-slate-800', !selected);
+      });
+      document.getElementById('flight-control-status').innerText = `LIVE ${phase.toUpperCase()}`;
+    }
+
+    async function postControl(path, payload) {
+      const response = await fetch(`${apiBase}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        throw new Error(`Control request failed (${response.status}): ${await response.text()}`);
+      }
+      return response.json();
+    }
+
+    document.getElementById('run-mission-risk').addEventListener('click', async () => {
+      const resultElement = document.getElementById('mission-risk-result');
+      resultElement.innerText = 'Calculating scenario estimate…';
+      try {
+        const response = await fetch(`${apiBase}/api/mission/simulate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mission_type: document.getElementById('mission-profile').value
+          })
+        });
+        if (!response.ok) {
+          throw new Error(`Mission estimate failed (${response.status}): ${await response.text()}`);
+        }
+        const result = await response.json();
+        resultElement.innerText =
+          `${result.mission_risk.toUpperCase()} · score ${result.risk_score}/100 · ` +
+          `CHT ${result.predicted_max_cht}°C · EGT ${result.predicted_max_egt}°C · ` +
+          `fuel ${result.predicted_fuel_consumption_l} L · ` +
+          `ending health ${result.predicted_health_index_end}/100. ` +
+          `${result.recommendation} Scenario estimate only; not flight clearance.`;
+      } catch (error) {
+        resultElement.innerText = 'Mission estimate unavailable.';
+        console.error(error);
+      }
+    });
+
+    async function fetchHistory() {
+      const response = await fetch(`${apiBase}/api/engine/ENG-01/history?limit=5000`);
+      if (!response.ok) {
+        throw new Error(`History request failed (${response.status}): ${await response.text()}`);
+      }
+      return response.json();
+    }
+
+    async function loadHistory() {
+      const resultElement = document.getElementById('history-result');
+      resultElement.innerText = 'Loading saved telemetry…';
+      try {
+        savedHistory = await fetchHistory();
+        const slider = document.getElementById('history-slider');
+        slider.max = Math.max(savedHistory.length - 1, 0);
+        slider.value = slider.max;
+        slider.disabled = savedHistory.length === 0;
+        renderHistory(Number(slider.value));
+      } catch (error) {
+        resultElement.innerText = 'Could not load history.';
+        console.error(error);
+      }
+    }
+
+    function renderHistory(index) {
+      const resultElement = document.getElementById('history-result');
+      if (!savedHistory.length) {
+        resultElement.innerText = 'No saved telemetry yet. Keep the live stream connected.';
+        return;
+      }
+      const row = savedHistory[index];
+      const telemetry = row.telemetry;
+      const analytics = row.analytics;
+      resultElement.innerText =
+        `${index + 1}/${savedHistory.length} · ${new Date(row.timestamp).toLocaleString()} · ` +
+        `${telemetry.mission_phase || row.mission_id} · RPM ${Math.round(telemetry.rpm)} · ` +
+        `CHT ${telemetry.cht.toFixed(1)}°C · EGT ${telemetry.egt.toFixed(1)}°C · ` +
+        `${analytics.status.toUpperCase()} · health ${analytics.health_index.toFixed(1)}`;
+    }
+
+    document.getElementById('load-history').addEventListener('click', loadHistory);
+    document.getElementById('history-slider').addEventListener('input', (event) => {
+      renderHistory(Number(event.target.value));
+    });
+
+    document.getElementById('scenario-file').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const status = document.getElementById('scenario-replay-status');
+      status.innerText = 'Reading scenario CSV…';
+      try {
+        scenarioRows = parseCsv(await file.text());
+        scenarioName = file.name;
+        const slider = document.getElementById('scenario-slider');
+        slider.max = scenarioRows.length - 1;
+        slider.value = 0;
+        slider.disabled = false;
+        replayScenario(0);
+      } catch (error) {
+        scenarioRows = [];
+        status.innerText = error.message;
+        console.error(error);
+      }
+    });
+    document.getElementById('scenario-slider').addEventListener('input', (event) => {
+      replayScenario(Number(event.target.value));
+    });
+    document.getElementById('resume-live').addEventListener('click', () => {
+      scenarioRows = [];
+      scenarioName = '';
+      document.getElementById('scenario-file').value = '';
+      document.getElementById('scenario-slider').disabled = true;
+      document.getElementById('scenario-slider').value = 0;
+      document.getElementById('scenario-slider').max = 0;
+      document.getElementById('scenario-replay-status').innerText = 'Live display selected.';
+      document.getElementById('chart-caption').innerText =
+        `Live measured and twin-predicted temperatures · ${liveThermalSamples.length} samples`;
+      drawThermalChart(liveThermalSamples);
+    });
+    document.getElementById('export-report').addEventListener('click', async () => {
+      const status = document.getElementById('export-status');
+      status.innerText = 'Preparing telemetry report…';
+      try {
+        savedHistory = await fetchHistory();
+        downloadJson('vinnilal-telemetry-report.json', buildReport('telemetry_report'));
+        status.innerText = `JSON report downloaded with ${savedHistory.length} saved telemetry rows.`;
+      } catch (error) {
+        status.innerText = `Report export failed: ${error.message}`;
+        console.error(error);
+      }
+    });
+    document.getElementById('export-ticket').addEventListener('click', async () => {
+      const status = document.getElementById('export-status');
+      status.innerText = 'Preparing maintenance ticket…';
+      try {
+        savedHistory = await fetchHistory();
+        const report = buildReport('maintenance_ticket');
+        report.ticket = {
+          ticket_id: `VIN-${Date.now()}`,
+          priority: latestPayload?.analytics?.status === 'critical' ? 'critical' :
+            latestPayload?.analytics?.status === 'warning' ? 'high' : 'review',
+          recommendation: latestPayload?.analytics?.evidence?.join('; ') || 'Review telemetry and scenario evidence.',
+          status: 'open'
+        };
+        downloadJson('vinnilal-maintenance-ticket.json', report);
+        status.innerText = `Maintenance ticket JSON downloaded with ${savedHistory.length} saved telemetry rows.`;
+      } catch (error) {
+        status.innerText = `Ticket export failed: ${error.message}`;
+        console.error(error);
+      }
+    });
+
+    window.addEventListener('resize', () => drawThermalChart(liveThermalSamples));
+
+    phaseButtons.forEach((button) => {
+      button.addEventListener('click', async () => {
+        try {
+          const controls = await postControl('/api/simulator/controls', {
+            phase: button.dataset.phase
+          });
+          setSelectedPhase(controls.phase);
+        } catch (error) {
+          document.getElementById('flight-control-status').innerText = 'CONTROL ERROR';
+          console.error(error);
+        }
+      });
+    });
+
+    const controlInputs = [
+      ['slider-throttle', 'throttle', (value) => value / 100],
+      ['slider-alt', 'altitude', Number],
+      ['slider-temp', 'ambient_temperature', Number]
+    ];
+    controlInputs.forEach(([id, field, convert]) => {
+      const input = document.getElementById(id);
+      input.addEventListener('input', () => {
+        const value = Number(input.value);
+        document.getElementById(`val-${id.replace('slider-', '')}`).innerText =
+          field === 'throttle' ? `${value}%` :
+          field === 'altitude' ? `${value.toLocaleString()} ft` : `${value.toFixed(1)} °C`;
+        postControl('/api/simulator/controls', { [field]: convert(value) })
+          .catch((error) => {
+            document.getElementById('flight-control-status').innerText = 'CONTROL ERROR';
+            console.error(error);
+          });
+      });
+    });
+
+    [
+      ['fault-lub', 'lubrication_degradation', 'fault-lub-value'],
+      ['fault-cool', 'cooling_degradation', 'fault-cool-value'],
+      ['fault-inj', 'injector_clog', 'fault-inj-value']
+    ].forEach(([id, faultType, valueId]) => {
+      const input = document.getElementById(id);
+      input.addEventListener('input', () => {
+        const severity = Number(input.value);
+        document.getElementById(valueId).innerText = `${Math.round(severity * 100)}%`;
+        postControl('/api/simulator/inject', { fault_type: faultType, severity })
+          .catch((error) => console.error(error));
+      });
+    });
+
+    function handleTelemetryMessage(event) {
+      const data = JSON.parse(event.data);
+      if (!data.telemetry || !data.telemetry.rpm) {
+        const systemStatus = document.getElementById('sys-status');
+        systemStatus.innerText = 'DEGRADED';
+        systemStatus.classList.remove('text-green-400', 'text-red-400');
+        systemStatus.classList.add('text-yellow-400');
+        updateAlertConsole(data.analytics);
+        console.warn('Telemetry packet rejected by quality gate:', data.analytics?.evidence);
+        return;
+      }
+      const t = data.telemetry;
+      const analytics = data.analytics;
+      const controls = data.flight_controls;
+      latestPayload = data;
+      updateAlertConsole(analytics);
+      renderExplainability(analytics);
+      document.getElementById('val-rpm').innerText = Math.round(t.rpm) + ' RPM';
+      document.getElementById('val-map').innerText = t.manifold_pressure.toFixed(1) + ' kPa';
+      document.getElementById('val-oilp').innerText = t.oil_pressure.toFixed(2);
+      document.getElementById('val-oilt').innerText = t.oil_temperature.toFixed(1);
+      document.getElementById('val-vib').innerText = t.vibration.toFixed(2) + ' mm/s';
+      updateHealthGauges(analytics.subsystems);
+      liveThermalSamples.push({
+        cht: t.cht,
+        egt: t.egt,
+        twinCht: data.twin_predicted_cht,
+        twinEgt: data.twin_predicted_egt
+      });
+      if (liveThermalSamples.length > 60) liveThermalSamples.shift();
+      if (!scenarioRows.length) {
+        document.getElementById('chart-caption').innerText =
+          `Live measured and twin-predicted temperatures · ${liveThermalSamples.length} samples`;
+        drawThermalChart(liveThermalSamples);
+      }
+      const systemStatus = document.getElementById('sys-status');
+      const status = analytics.status.toLowerCase();
+      systemStatus.innerText = status.toUpperCase();
+      systemStatus.classList.remove('text-green-400', 'text-yellow-400', 'text-red-400');
+      systemStatus.classList.add(
+        status === 'critical' ? 'text-red-400' :
+        status === 'warning' || status === 'suspect' ? 'text-yellow-400' :
+        'text-green-400'
+      );
+      setSelectedPhase(controls.phase);
+      targetPitch = ({ takeoff: 0.14, climb: 0.14, descent: -0.1 })[controls.phase] || 0;
+      targetRoll = controls.phase === 'loiter' ? 0.2 : 0;
+      document.getElementById('val-pitch').innerText = `${(targetPitch * 180 / Math.PI).toFixed(1)}°`;
+      document.getElementById('val-roll').innerText = `${(targetRoll * 180 / Math.PI).toFixed(1)}°`;
+      document.getElementById('val-throttle').innerText = `${Math.round(t.throttle * 100)}%`;
+      document.getElementById('val-alt').innerText = `${Math.round(t.altitude).toLocaleString()} ft`;
+      document.getElementById('val-temp').innerText = `${t.ambient_temperature.toFixed(1)} °C`;
+      document.getElementById('slider-throttle').value = Math.round(t.throttle * 100);
+      document.getElementById('slider-alt').value = Math.round(t.altitude);
+      document.getElementById('slider-temp').value = Math.round(t.ambient_temperature);
+    }
+
+    connectTelemetry();
+  </script>
+</body>
+</html>

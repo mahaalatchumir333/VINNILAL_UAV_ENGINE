@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: vinnilal-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.4
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: VINNILAL_DB_PATH
+        value: /tmp/telemetry.db
