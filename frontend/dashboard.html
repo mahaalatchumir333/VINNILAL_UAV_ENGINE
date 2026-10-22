@@ -8,9 +8,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root{
-    --bg:#0a1420; --panel:#101d2c; --panel-2:#0d1826; --line:#1c2f42;
-    --text:#dbe7f0; --text-dim:#7590a5;
-    --accent:#5ad1a8;      /* phosphor-green, aviation-glass-cockpit primary */
+    --bg:linear-gradient(135deg, #eaf8ff 0%, #d9f1ff 45%, #f4fbff 100%);
+    --panel:#f6fbff; --panel-2:#edf8ff; --line:#cfe4f3;
+    --text:#123148; --text-dim:#5b7b94;
+    --accent:#2ea6ff;      /* cloud-blue primary */
     --amber:#e8a23d;       /* caution */
     --red:#e5595f;         /* critical */
     --blue:#5fa8e0;        /* twin-predicted reference values */
@@ -25,7 +26,7 @@
   header{
     display:flex; align-items:center; justify-content:space-between;
     padding:14px 22px; border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg, #0c1826, #0a1420);
+    background:linear-gradient(180deg, rgba(255,255,255,.75), rgba(223,239,255,.8));
     flex-wrap:wrap; gap:10px;
   }
   .title{display:flex; align-items:baseline; gap:10px;}
@@ -39,10 +40,11 @@
   button{
     background:var(--panel-2); border:1px solid var(--line); color:var(--text);
     padding:6px 12px; border-radius:4px; font-family:var(--sans); font-size:12px;
-    cursor:pointer; transition:border-color .15s;
+    cursor:pointer; transition:border-color .15s, background-color .15s, color .15s;
   }
   button:hover{border-color:var(--accent);}
-  button.primary{background:var(--accent); color:#06231a; border-color:var(--accent); font-weight:600;}
+  button.primary{background:var(--accent); color:#ffffff; border-color:var(--accent); font-weight:600;}
+  button.primary.connected{background:#dff7ea; color:#1d7f4f; border-color:#8fd4a5;}
   button.danger-outline{border-color:var(--red); color:var(--red);}
   button:disabled{opacity:.4; cursor:not-allowed;}
   .dot{width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--text-dim);}
@@ -262,21 +264,33 @@ const MAX_CHART_POINTS = 120;
 function connect(){
   apiBase = $('api-base').value.replace(/\/$/, '');
   const wsUrl = apiBase.replace(/^http/, 'ws') + '/ws/telemetry';
+  const connectBtn = $('connect-btn');
+  connectBtn.textContent = 'Connecting…';
+  connectBtn.classList.remove('connected');
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
     $('conn-dot').className = 'dot live';
     $('conn-label').textContent = 'live';
-    $('connect-btn').disabled = true;
+    connectBtn.textContent = 'Connected';
+    connectBtn.classList.add('connected');
+    connectBtn.disabled = true;
     $('disconnect-btn').disabled = false;
   };
   ws.onclose = () => {
     $('conn-dot').className = 'dot down';
     $('conn-label').textContent = 'disconnected';
-    $('connect-btn').disabled = false;
+    connectBtn.textContent = 'Connect';
+    connectBtn.classList.remove('connected');
+    connectBtn.disabled = false;
     $('disconnect-btn').disabled = true;
   };
-  ws.onerror = () => { $('conn-label').textContent = 'connection error'; };
+  ws.onerror = () => {
+    $('conn-label').textContent = 'connection error';
+    connectBtn.textContent = 'Connect';
+    connectBtn.classList.remove('connected');
+    connectBtn.disabled = false;
+  };
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data);
     if (msg.error) { console.warn('telemetry error', msg); return; }
@@ -288,7 +302,16 @@ function connect(){
   pollSimStatus();
 }
 
-function disconnect(){ if (ws) ws.close(); }
+function disconnect(){
+  if (ws) ws.close();
+  const connectBtn = $('connect-btn');
+  $('conn-dot').className = 'dot down';
+  $('conn-label').textContent = 'disconnected';
+  connectBtn.textContent = 'Connect';
+  connectBtn.classList.remove('connected');
+  connectBtn.disabled = false;
+  $('disconnect-btn').disabled = true;
+}
 
 // ---- rendering a live tick ----
 let twinCache = {}; // last-known twin-predicted values, since telemetry payload itself doesn't carry them
