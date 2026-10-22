@@ -21,6 +21,29 @@
     .chart-canvas { display: block; width: 100%; height: 220px; }
     .health-track { background: rgba(148, 163, 184, 0.35); border-radius: 9999px; height: 8px; overflow: hidden; }
     .health-fill { background: #34d399; height: 100%; transition: width 250ms ease, background-color 250ms ease; }
+    body .text-white { color: #12304d !important; }
+    body .text-slate-200,
+    body .text-slate-300 { color: #294560 !important; }
+    body .text-slate-400 { color: #496783 !important; }
+    body .text-slate-500 { color: #5d7893 !important; }
+    body .text-yellow-300,
+    body .text-yellow-400,
+    body .text-yellow-500 { color: #946200 !important; }
+    body .text-cyan-300,
+    body .text-cyan-400 { color: #08738a !important; }
+    body .text-blue-400 { color: #2457a7 !important; }
+    body .text-orange-400 { color: #b64c12 !important; }
+    body .text-green-400,
+    body .text-emerald-300,
+    body .text-emerald-400 { color: #08734f !important; }
+    body .text-purple-400 { color: #7136a2 !important; }
+    body .text-red-300,
+    body .text-red-400 { color: #b42332 !important; }
+    body .bg-slate-800 { background-color: #e5f1ff !important; }
+    body .hover\:bg-slate-700:hover { background-color: #d4e7fb !important; }
+    #backend-url,
+    #mission-profile { background-color: #f8fbff; color: #12304d; border-color: #bfd6f6; }
+    #connect-backend.text-white { color: #fff !important; }
   </style>
 </head>
 <body class="p-4">
@@ -455,7 +478,7 @@
       const plotHeight = height - top - bottom;
       context.font = '10px sans-serif';
       context.strokeStyle = '#334155';
-      context.fillStyle = '#94a3b8';
+      context.fillStyle = '#496783';
       context.lineWidth = 1;
       for (let tick = 0; tick <= 4; tick++) {
         const y = top + plotHeight * tick / 4;
