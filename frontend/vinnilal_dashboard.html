@@ -6,10 +6,20 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
-    body { background-color: #0b0f17; color: #e2e8f0; font-family: sans-serif; }
-    .card { background: #131b29; border: 1px solid #1e293b; border-radius: 12px; }
+    body {
+      background: linear-gradient(180deg, #edf7ff 0%, #dfeeff 32%, #cfe3ff 100%);
+      color: #10213a;
+      font-family: sans-serif;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(96, 165, 250, 0.08);
+      backdrop-filter: blur(6px);
+    }
     .chart-canvas { display: block; width: 100%; height: 220px; }
-    .health-track { background: #1e293b; border-radius: 9999px; height: 8px; overflow: hidden; }
+    .health-track { background: rgba(148, 163, 184, 0.35); border-radius: 9999px; height: 8px; overflow: hidden; }
     .health-fill { background: #34d399; height: 100%; transition: width 250ms ease, background-color 250ms ease; }
   </style>
 </head>
@@ -36,7 +46,7 @@
       class="min-w-64 flex-1 rounded bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white"
       autocomplete="url" spellcheck="false">
     <button id="connect-backend" type="button"
-      class="rounded bg-yellow-500 px-4 py-2 text-xs font-bold text-black hover:bg-yellow-400">
+      class="rounded bg-sky-500 px-4 py-2 text-xs font-bold text-white hover:bg-sky-400 transition-colors">
       CONNECT
     </button>
     <span id="backend-config-status" class="text-xs text-slate-400" aria-live="polite"></span>
@@ -309,9 +319,20 @@
     let reconnectTimer = null;
     const connectionStatus = document.getElementById('connection-status');
     const connectionDot = document.getElementById('connection-dot');
+    const connectButton = document.getElementById('connect-backend');
     const backendUrlInput = document.getElementById('backend-url');
     const backendConfigStatus = document.getElementById('backend-config-status');
     const phaseButtons = [...document.querySelectorAll('.phase-button')];
+
+    function setConnectButtonState(isConnected) {
+      connectButton.textContent = isConnected ? 'CONNECTED' : 'CONNECT';
+      connectButton.classList.toggle('bg-sky-500', !isConnected);
+      connectButton.classList.toggle('hover:bg-sky-400', !isConnected);
+      connectButton.classList.toggle('bg-emerald-500', isConnected);
+      connectButton.classList.toggle('hover:bg-emerald-400', isConnected);
+      connectButton.classList.toggle('text-white', true);
+      connectButton.classList.toggle('text-black', false);
+    }
     let savedHistory = [];
     let latestPayload = null;
     let liveThermalSamples = [];
@@ -334,6 +355,7 @@
         ws = null;
       }
       if (!apiBase) {
+        setConnectButtonState(false);
         connectionStatus.innerText = 'BACKEND URL REQUIRED';
         backendConfigStatus.innerText = 'Paste the public Render service URL to connect.';
         connectionDot.classList.remove('bg-green-400', 'animate-pulse');
@@ -348,6 +370,7 @@
       backendConfigStatus.innerText = `Backend: ${backend.origin}`;
 
       socket.onopen = () => {
+        setConnectButtonState(true);
         connectionStatus.innerText = 'LIVE';
         connectionDot.classList.remove('bg-slate-500', 'bg-red-500');
         connectionDot.classList.add('bg-green-400', 'animate-pulse');
@@ -355,6 +378,7 @@
 
       socket.onclose = () => {
         if (ws !== socket) return;
+        setConnectButtonState(false);
         connectionStatus.innerText = 'DISCONNECTED · RETRYING';
         connectionDot.classList.remove('bg-green-400', 'animate-pulse');
         connectionDot.classList.add('bg-red-500');
@@ -363,6 +387,7 @@
 
       socket.onerror = () => {
         if (ws !== socket) return;
+        setConnectButtonState(false);
         connectionStatus.innerText = 'CONNECTION ERROR';
         connectionDot.classList.remove('bg-green-400', 'animate-pulse');
         connectionDot.classList.add('bg-red-500');
